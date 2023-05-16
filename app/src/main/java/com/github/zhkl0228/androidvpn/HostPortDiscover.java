@@ -32,7 +32,7 @@ class HostPortDiscover implements Runnable {
         byte[] buf = new byte[32];
         try (DatagramSocket socket = new DatagramSocket(UDP_PORT)) {
             lock.acquire();
-            socket.setSoTimeout(10000);
+            socket.setSoTimeout(3000);
             Log.d(AndroidVPN.TAG, "start discover socket=" + socket);
             while (!canStop) {
                 try {
@@ -55,8 +55,7 @@ class HostPortDiscover implements Runnable {
                             }
                         }
                     }
-                } catch (SocketTimeoutException e) {
-                    Log.d(AndroidVPN.TAG, "receive timeout");
+                } catch (SocketTimeoutException ignored) {
                 }
             }
         } catch (Exception e) {
@@ -79,9 +78,6 @@ class HostPortDiscover implements Runnable {
 
     final void stop() {
         canStop = true;
-        synchronized (this) {
-            this.notifyAll();
-        }
     }
 
 }
