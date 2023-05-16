@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">AndroidVPN</string>
+    <string name="title_activity_start_vpn">StartVpn</string>
+    <string name="prompt_host">Host</string>
+    <string name="prompt_port">Port</string>
+    <string name="action_start_vpn">Start or Stop</string>
+</resources>
