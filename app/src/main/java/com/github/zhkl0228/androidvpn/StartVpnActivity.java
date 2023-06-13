@@ -3,6 +3,7 @@ package com.github.zhkl0228.androidvpn;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.VpnService;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
@@ -18,6 +19,7 @@ public class StartVpnActivity extends AppCompatActivity implements HostPortDisco
 
     private ActivityStartVpnBinding binding;
     private HostPortDiscover hostPortDiscover;
+    private SharedPreferences preference;
 
     @Override
     public void onDiscover(String host, int port) {
@@ -30,6 +32,8 @@ public class StartVpnActivity extends AppCompatActivity implements HostPortDisco
             hostEditText.setText(host);
             portEditText.setText(String.valueOf(port));
             startVpnButton.setEnabled(true);
+
+            preference.edit().putString("host", host).putInt("port", port).apply();
         });
     }
 
@@ -39,6 +43,7 @@ public class StartVpnActivity extends AppCompatActivity implements HostPortDisco
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        preference = getPreferences(Context.MODE_PRIVATE);
 
         binding = ActivityStartVpnBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
@@ -53,6 +58,16 @@ public class StartVpnActivity extends AppCompatActivity implements HostPortDisco
                 onActivityResult(VPN_REQUEST_CODE, Activity.RESULT_OK, null);
             }
         });
+
+        String host = preference.getString("host", null);
+        int port = preference.getInt("port", 0);
+        if (host != null && port != 0) {
+            EditText hostEditText = binding.host;
+            EditText portEditText = binding.port;
+            hostEditText.setText(host);
+            portEditText.setText(String.valueOf(port));
+            startVpnButton.setEnabled(true);
+        }
 
         WifiManager wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
         WifiManager.MulticastLock lock = wifiManager.createMulticastLock(AndroidVPN.TAG);
