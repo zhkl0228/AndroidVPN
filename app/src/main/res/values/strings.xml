@@ -3,5 +3,6 @@
     <string name="title_activity_start_vpn">InspectorVpn</string>
     <string name="prompt_host">Host</string>
     <string name="prompt_port">Port</string>
+    <string name="prompt_ca">Install RootCA: <a href='http://88.88.88.88:88'>http://88.88.88.88:88</a></string>
     <string name="action_start_vpn">Start or Stop</string>
 </resources>

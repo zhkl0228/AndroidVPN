@@ -7,6 +7,7 @@ import android.content.SharedPreferences;
 import android.net.VpnService;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
+import android.text.method.LinkMovementMethod;
 import android.util.Log;
 import android.widget.Button;
 import android.widget.EditText;
@@ -47,6 +48,7 @@ public class StartVpnActivity extends AppCompatActivity implements HostPortDisco
 
         binding = ActivityStartVpnBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
+        binding.ca.setMovementMethod(LinkMovementMethod.getInstance());
 
         final Button startVpnButton = binding.startVpn;
 
