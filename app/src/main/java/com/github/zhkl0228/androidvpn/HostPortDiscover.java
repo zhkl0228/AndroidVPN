@@ -49,7 +49,7 @@ class HostPortDiscover implements Runnable {
                         dataInput.readFully(vpn);
                         if ("vpn".equals(new String(vpn))) {
                             InetAddress address = packet.getAddress();
-                            int port = dataInput.readShort();
+                            int port = dataInput.readShort() & 0xffff;
                             if (listener != null) {
                                 listener.onDiscover(address.getHostAddress(), port);
                             }
