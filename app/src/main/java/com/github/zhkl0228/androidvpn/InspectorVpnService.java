@@ -16,6 +16,8 @@ import android.os.Process;
 import android.text.TextUtils;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
+
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
@@ -72,7 +74,7 @@ public class InspectorVpnService extends VpnService {
         }
 
         @Override
-        public void handleMessage(Message msg) {
+        public void handleMessage(@NonNull Message msg) {
             try {
                 if (msg.what == MSG_SERVICE_INTENT) {
                     handleIntent((Intent) msg.obj);
@@ -95,6 +97,9 @@ public class InspectorVpnService extends VpnService {
                     ", vpnHost=" + vpnHost + ", vpnPort=" + vpnPort);
 
             try {
+                if (cmd == null) {
+                    throw new IllegalStateException();
+                }
                 switch (cmd) {
                     case start:
                         if (vpnHost != null && vpnPort != 0) {
@@ -427,6 +432,7 @@ public class InspectorVpnService extends VpnService {
             networkInfo = cm == null ? null : cm.getActiveNetworkInfo();
         }
 
+        @NonNull
         @Override
         public VpnService.Builder setMtu(int mtu) {
             this.mtu = mtu;
@@ -434,22 +440,25 @@ public class InspectorVpnService extends VpnService {
             return this;
         }
 
+        @NonNull
         @Override
-        public Builder addAddress(String address, int prefixLength) {
+        public Builder addAddress(@NonNull String address, int prefixLength) {
             listAddress.add(address + "/" + prefixLength);
             super.addAddress(address, prefixLength);
             return this;
         }
 
+        @NonNull
         @Override
-        public Builder addRoute(String address, int prefixLength) {
+        public Builder addRoute(@NonNull String address, int prefixLength) {
             listRoute.add(address + "/" + prefixLength);
             super.addRoute(address, prefixLength);
             return this;
         }
 
+        @NonNull
         @Override
-        public Builder addDnsServer(InetAddress address) {
+        public Builder addDnsServer(@NonNull InetAddress address) {
             listDns.add(address);
             super.addDnsServer(address);
             return this;
