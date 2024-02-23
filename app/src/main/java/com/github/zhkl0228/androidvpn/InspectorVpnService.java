@@ -122,7 +122,7 @@ public class InspectorVpnService extends VpnService {
 
         private void start(String vpnHost, int vpnPort) {
             if (vpn == null) {
-                Builder builder = getBuilder();
+                Builder builder = getBuilder(vpnHost);
                 vpn = startVPN(builder);
                 if (vpn == null) {
                     throw new IllegalStateException("start vpn failed.");
@@ -279,7 +279,7 @@ public class InspectorVpnService extends VpnService {
         }
     }
 
-    private Builder getBuilder() {
+    private Builder getBuilder(String vpnHost) {
         // Build VPN service
         Builder builder = new Builder();
         builder.setSession("Inspector");
@@ -295,6 +295,15 @@ public class InspectorVpnService extends VpnService {
 
         // Exclude IP ranges
         List<IPUtil.CIDR> listExclude = new ArrayList<>();
+
+        try {
+            InetAddress address = InetAddress.getByName(vpnHost);
+            IPUtil.CIDR local = new IPUtil.CIDR(address, address.getAddress().length * 8);
+            Log.i(TAG, "Excluding " + vpnHost + " " + local);
+            listExclude.add(local);
+        } catch (IOException ex) {
+            Log.e(TAG, ex + "\n" + Log.getStackTraceString(ex));
+        }
 
         // DNS address
         for (InetAddress dns : getDns()) {
