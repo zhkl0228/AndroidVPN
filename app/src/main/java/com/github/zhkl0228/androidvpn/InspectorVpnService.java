@@ -2,6 +2,7 @@ package com.github.zhkl0228.androidvpn;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
@@ -13,11 +14,14 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.ParcelFileDescriptor;
 import android.os.Process;
+import android.system.OsConstants;
 import android.text.TextUtils;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
@@ -28,19 +32,26 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
 import java.net.Socket;
+import java.net.SocketAddress;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 public class InspectorVpnService extends VpnService {
@@ -214,6 +225,96 @@ public class InspectorVpnService extends VpnService {
     }
 
     private Thread vpnServerThread;
+    private Thread udpServerThread;
+
+    private class UdpServer implements Runnable {
+        private final SocketAddress socketAddress;
+        public UdpServer(SocketAddress socketAddress) {
+            this.socketAddress = socketAddress;
+        }
+        private final Map<Integer, String[]> packageMap = new HashMap<>();
+        @Override
+        public void run() {
+            Thread thread = Thread.currentThread();
+            byte[] buffer = new byte[1024];
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            PackageManager pm = getPackageManager();
+            try (DatagramSocket udp = new DatagramSocket(socketAddress)) {
+                protect(udp);
+                udp.setSoTimeout(2000);
+                while (udpServerThread == thread) {
+                    try {
+                        DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                        udp.receive(packet);
+                        DataInput dataInput = new DataInputStream(new ByteArrayInputStream(buffer));
+                        int type = dataInput.readUnsignedByte();
+                        if (type == 0x2) {
+                            int hash = dataInput.readInt();
+                            String[] packages = packageMap.get(hash);
+                            Log.d(TAG, "queryPackages hash=" + hash + ", packages=" + Arrays.toString(packages));
+                            byte[] data = responseForPackages(hash, packages);
+                            DatagramPacket forSend = new DatagramPacket(data, data.length, packet.getSocketAddress());
+                            udp.send(forSend);
+                            continue;
+                        }
+                        if (type == 0x8) {
+                            byte[] data = new byte[]{0x8};
+                            DatagramPacket ack = new DatagramPacket(data, data.length, packet.getSocketAddress());
+                            udp.send(ack);
+                            continue;
+                        }
+                        if (type != 0x1) {
+                            throw new IllegalStateException("type=" + type);
+                        }
+                        int protocol = dataInput.readUnsignedByte();
+                        String saddr = dataInput.readUTF();
+                        int sport = dataInput.readUnsignedShort();
+                        String daddr = dataInput.readUTF();
+                        int dport = dataInput.readUnsignedShort();
+                        if (protocol != OsConstants.IPPROTO_TCP && protocol != OsConstants.IPPROTO_UDP) {
+                            continue;
+                        }
+                        InetSocketAddress local = new InetSocketAddress(saddr, sport);
+                        InetSocketAddress remote = new InetSocketAddress(daddr, dport);
+                        int uid = cm.getConnectionOwnerUid(protocol, local, remote);
+                        String[] packages = pm.getPackagesForUid(uid);
+                        int hash = Objects.hash(protocol, saddr, sport, daddr, dport);
+                        Log.d(TAG, "allowed protocol=" + protocol + ", uid=" + uid + ", packages=" + Arrays.toString(packages) + " " + local + " => " + remote);
+                        if (packages != null) {
+                            packageMap.put(hash, packages);
+                        }
+                    } catch(SocketTimeoutException ignored) {}
+                }
+            } catch (IOException e) {
+                Log.d(TAG, "run udp server failed.", e);
+            } catch (Exception e) {
+                Log.w(TAG, "run udp server failed.", e);
+            } finally {
+                Log.d(TAG, "exit udp server.");
+                udpServerThread = null;
+            }
+        }
+
+        @NonNull
+        private byte[] responseForPackages(int hash, String[] packages) {
+            try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+                DataOutput dataOutput = new DataOutputStream(baos);
+                dataOutput.writeByte(0x2);
+                dataOutput.writeInt(hash);
+                if (packages == null) {
+                    dataOutput.writeByte(0);
+                } else {
+                    dataOutput.writeByte(packages.length);
+                    for (String name : packages) {
+                        dataOutput.writeUTF(name);
+                    }
+                }
+                return baos.toByteArray();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
 
     private void startNative(final ParcelFileDescriptor vpn, String vpnHost, int vpnPort) {
         Log.d(TAG, "startNative vpnHost=" + vpnHost + ", vpnPort=" + vpnPort + ", vpnServerThread=" + vpnServerThread);
@@ -225,6 +326,11 @@ public class InspectorVpnService extends VpnService {
                 protect(socket);
                 socket.connect(new InetSocketAddress(vpnHost, vpnPort), 15000);
                 Log.d(TAG, "Connected to vpn server: " + socket);
+                {
+                    udpServerThread = new Thread(new UdpServer(socket.getLocalSocketAddress()));
+                    udpServerThread.setDaemon(true);
+                    udpServerThread.start();
+                }
 
                 InputStream inputStream = socket.getInputStream();
                 OutputStream outputStream = socket.getOutputStream();
@@ -251,7 +357,7 @@ public class InspectorVpnService extends VpnService {
                     }
                 }
             } catch (IOException e) {
-                Log.w(TAG, "connect vpn server failed", e);
+                Log.d(TAG, "loop vpn server failed", e);
             }
 
             ParcelFileDescriptor fd = this.vpn;
