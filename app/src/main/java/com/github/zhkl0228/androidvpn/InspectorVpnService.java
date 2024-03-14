@@ -2,6 +2,7 @@ package com.github.zhkl0228.androidvpn;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.net.ConnectivityManager;
@@ -281,7 +282,14 @@ public class InspectorVpnService extends VpnService {
                         int hash = Objects.hash(protocol, saddr, sport, daddr, dport);
                         Log.d(TAG, "allowed protocol=" + protocol + ", uid=" + uid + ", packages=" + Arrays.toString(packages) + " " + local + " => " + remote);
                         if (packages != null) {
-                            packageMap.put(hash, packages);
+                            List<String> list = new ArrayList<>(packages.length);
+                            for (String packageName : packages) {
+                                ApplicationInfo pi = pm.getApplicationInfo(packageName, PackageManager.GET_GIDS);
+                                CharSequence label = pm.getApplicationLabel(pi);
+                                list.add(label + "(" + packageName + ")");
+                            }
+                            Log.d(TAG, "allowed list=" + list);
+                            packageMap.put(hash, list.toArray(new String[0]));
                         }
                     } catch(SocketTimeoutException ignored) {}
                 }
@@ -291,7 +299,6 @@ public class InspectorVpnService extends VpnService {
                 Log.w(TAG, "run udp server failed.", e);
             } finally {
                 Log.d(TAG, "exit udp server.");
-                udpServerThread = null;
             }
         }
 
