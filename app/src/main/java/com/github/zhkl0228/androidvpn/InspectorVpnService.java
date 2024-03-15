@@ -187,12 +187,14 @@ public class InspectorVpnService extends VpnService {
         }
     }
 
+    private static final byte VPN_MAGIC = 0xe;
+
     private class StreamForward implements Runnable {
-        private final DataInput inputStream;
+        private final DataInput dataInput;
         private final OutputStream outputStream;
         private final int mtu;
-        public StreamForward(DataInput inputStream, OutputStream outputStream, int mtu) {
-            this.inputStream = inputStream;
+        public StreamForward(DataInput dataInput, OutputStream outputStream, int mtu) {
+            this.dataInput = dataInput;
             this.outputStream = outputStream;
             this.mtu = mtu;
         }
@@ -201,15 +203,18 @@ public class InspectorVpnService extends VpnService {
             try {
                 byte[] packet = new byte[mtu];
                 while (vpnServerThread != null) {
-                    int length = inputStream.readUnsignedShort();
+                    int length = dataInput.readUnsignedShort();
                     if (length > mtu) {
                         throw new IOException("length=" + length + ", mtu=" + mtu);
                     }
-                    inputStream.readFully(packet, 0, length);
+                    dataInput.readFully(packet, 0, length);
                     if (length == -1) {
                         throw new EOFException();
                     }
                     if (length > 0) {
+                        for (int i = 0; i < length; i++) {
+                            packet[i] ^= VPN_MAGIC;
+                        }
                         outputStream.write(packet, 0, length);
                         outputStream.flush();
                     }
@@ -255,12 +260,6 @@ public class InspectorVpnService extends VpnService {
                             byte[] data = responseForPackages(hash, packages);
                             DatagramPacket forSend = new DatagramPacket(data, data.length, packet.getSocketAddress());
                             udp.send(forSend);
-                            continue;
-                        }
-                        if (type == 0x8) {
-                            byte[] data = new byte[]{0x8};
-                            DatagramPacket ack = new DatagramPacket(data, data.length, packet.getSocketAddress());
-                            udp.send(ack);
                             continue;
                         }
                         if (type != 0x1) {
@@ -344,6 +343,7 @@ public class InspectorVpnService extends VpnService {
                 try (InputStream vpnInput = new FileInputStream(vpn.getFileDescriptor());
                      OutputStream vpnOutput = new FileOutputStream(vpn.getFileDescriptor())) {
                     DataOutput output = new DataOutputStream(outputStream);
+                    output.writeByte(0x0);
                     Thread thread = new Thread(new StreamForward(new DataInputStream(inputStream), vpnOutput, mtu));
                     thread.start();
                     byte[] packet = new byte[mtu];
@@ -357,6 +357,9 @@ public class InspectorVpnService extends VpnService {
                                 throw new IOException("Invalid mtu=" + mtu + ", length=" + length);
                             }
                             output.writeShort(length);
+                            for (int i = 0; i < length; i++) {
+                                packet[i] ^= VPN_MAGIC;
+                            }
                             output.write(packet, 0, length);
                             outputStream.flush();
                         }
