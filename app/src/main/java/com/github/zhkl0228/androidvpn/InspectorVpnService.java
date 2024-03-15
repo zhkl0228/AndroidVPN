@@ -226,7 +226,6 @@ public class InspectorVpnService extends VpnService {
     }
 
     private Thread vpnServerThread;
-    private Thread udpServerThread;
 
     private class UdpServer implements Runnable {
         private final SocketAddress socketAddress;
@@ -236,14 +235,14 @@ public class InspectorVpnService extends VpnService {
         private final Map<Integer, String[]> packageMap = new HashMap<>();
         @Override
         public void run() {
-            Thread thread = Thread.currentThread();
             byte[] buffer = new byte[1024];
             ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
             PackageManager pm = getPackageManager();
             try (DatagramSocket udp = new DatagramSocket(socketAddress)) {
                 protect(udp);
                 udp.setSoTimeout(2000);
-                while (udpServerThread == thread) {
+                Thread thread;
+                while ((thread = vpnServerThread) != null && thread.isAlive()) {
                     try {
                         DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                         udp.receive(packet);
@@ -334,7 +333,7 @@ public class InspectorVpnService extends VpnService {
                 socket.connect(new InetSocketAddress(vpnHost, vpnPort), 15000);
                 Log.d(TAG, "Connected to vpn server: " + socket);
                 {
-                    udpServerThread = new Thread(new UdpServer(socket.getLocalSocketAddress()));
+                    Thread udpServerThread = new Thread(new UdpServer(socket.getLocalSocketAddress()));
                     udpServerThread.setDaemon(true);
                     udpServerThread.start();
                 }
