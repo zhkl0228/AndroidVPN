@@ -49,9 +49,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Enumeration;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -237,7 +235,6 @@ public class InspectorVpnService extends VpnService {
         public UdpServer(SocketAddress socketAddress) {
             this.socketAddress = socketAddress;
         }
-        private final Map<Integer, String[]> packageMap = new HashMap<>();
         @Override
         public void run() {
             byte[] buffer = new byte[1024];
@@ -253,15 +250,6 @@ public class InspectorVpnService extends VpnService {
                         udp.receive(packet);
                         DataInput dataInput = new DataInputStream(new ByteArrayInputStream(buffer));
                         int type = dataInput.readUnsignedByte();
-                        if (type == 0x2) {
-                            int hash = dataInput.readInt();
-                            String[] packages = packageMap.get(hash);
-                            Log.d(TAG, "queryPackages hash=" + hash + ", packages=" + Arrays.toString(packages));
-                            byte[] data = responseForPackages(hash, packages);
-                            DatagramPacket forSend = new DatagramPacket(data, data.length, packet.getSocketAddress());
-                            udp.send(forSend);
-                            continue;
-                        }
                         if (type != 0x1) {
                             throw new IllegalStateException("type=" + type);
                         }
@@ -287,7 +275,9 @@ public class InspectorVpnService extends VpnService {
                                 list.add(label + "(" + packageName + ")");
                             }
                             Log.d(TAG, "allowed list=" + list);
-                            packageMap.put(hash, list.toArray(new String[0]));
+                            byte[] data = responseForPackages(hash, list);
+                            DatagramPacket forSend = new DatagramPacket(data, data.length, packet.getSocketAddress());
+                            udp.send(forSend);
                         }
                     } catch(SocketTimeoutException ignored) {}
                 }
@@ -301,18 +291,17 @@ public class InspectorVpnService extends VpnService {
         }
 
         @NonNull
-        private byte[] responseForPackages(int hash, String[] packages) {
+        private byte[] responseForPackages(int hash, List<String> packages) {
+            if (packages == null) {
+                throw new IllegalArgumentException();
+            }
             try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
                 DataOutput dataOutput = new DataOutputStream(baos);
                 dataOutput.writeByte(0x2);
                 dataOutput.writeInt(hash);
-                if (packages == null) {
-                    dataOutput.writeByte(0);
-                } else {
-                    dataOutput.writeByte(packages.length);
-                    for (String name : packages) {
-                        dataOutput.writeUTF(name);
-                    }
+                dataOutput.writeByte(packages.size());
+                for (String name : packages) {
+                    dataOutput.writeUTF(name);
                 }
                 return baos.toByteArray();
             } catch (IOException e) {
