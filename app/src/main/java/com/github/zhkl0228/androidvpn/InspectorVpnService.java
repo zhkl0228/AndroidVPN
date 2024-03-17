@@ -2,7 +2,7 @@ package com.github.zhkl0228.androidvpn;
 
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.net.ConnectivityManager;
@@ -268,11 +268,11 @@ public class InspectorVpnService extends VpnService {
                         int hash = Objects.hash(protocol, saddr, sport, daddr, dport);
                         Log.d(TAG, "allowed protocol=" + protocol + ", uid=" + uid + ", packages=" + Arrays.toString(packages) + " " + local + " => " + remote);
                         if (packages != null) {
-                            List<String> list = new ArrayList<>(packages.length);
+                            List<Package> list = new ArrayList<>(packages.length);
                             for (String packageName : packages) {
-                                ApplicationInfo pi = pm.getApplicationInfo(packageName, PackageManager.GET_GIDS);
-                                CharSequence label = pm.getApplicationLabel(pi);
-                                list.add(label + "(" + packageName + ")");
+                                PackageInfo packageInfo = pm.getPackageInfo(packageName, PackageManager.GET_META_DATA);
+                                CharSequence label = pm.getApplicationLabel(packageInfo.applicationInfo);
+                                list.add(new Package(packageName, label, packageInfo.getLongVersionCode()));
                             }
                             Log.d(TAG, "allowed list=" + list);
                             byte[] data = responseForPackages(hash, list);
@@ -291,7 +291,7 @@ public class InspectorVpnService extends VpnService {
         }
 
         @NonNull
-        private byte[] responseForPackages(int hash, List<String> packages) {
+        private byte[] responseForPackages(int hash, List<Package> packages) {
             if (packages == null) {
                 throw new IllegalArgumentException();
             }
@@ -300,8 +300,8 @@ public class InspectorVpnService extends VpnService {
                 dataOutput.writeByte(0x2);
                 dataOutput.writeInt(hash);
                 dataOutput.writeByte(packages.size());
-                for (String name : packages) {
-                    dataOutput.writeUTF(name);
+                for (Package pkg : packages) {
+                    pkg.output(dataOutput);
                 }
                 return baos.toByteArray();
             } catch (IOException e) {
