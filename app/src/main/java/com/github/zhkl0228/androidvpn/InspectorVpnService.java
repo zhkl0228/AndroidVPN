@@ -9,6 +9,7 @@ import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.VpnService;
 import android.os.Bundle;
+import android.os.FileUtils;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
@@ -17,9 +18,13 @@ import android.os.ParcelFileDescriptor;
 import android.os.Process;
 import android.system.OsConstants;
 import android.text.TextUtils;
+import android.util.Base64;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -28,6 +33,7 @@ import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.EOFException;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -50,6 +56,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 
@@ -332,7 +339,40 @@ public class InspectorVpnService extends VpnService {
                 try (InputStream vpnInput = new FileInputStream(vpn.getFileDescriptor());
                      OutputStream vpnOutput = new FileOutputStream(vpn.getFileDescriptor())) {
                     DataOutput output = new DataOutputStream(outputStream);
-                    output.writeByte(0x0);
+                    int osType = 0x0;
+                    File dir = getExternalFilesDir(null);
+                    // /sdcard/Android/data/com.github.zhkl0228.androidvpn/files/vpn_config.txt
+                    File configFile = dir == null ? null : new File(dir, "vpn_config.txt");
+                    Log.d(TAG, "vpn config path: " + configFile);
+                    byte[] configData = null;
+                    if (configFile != null && configFile.canRead()) {
+                        try (FileInputStream fileInputStream = new FileInputStream(configFile);
+                             ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+                            FileUtils.copy(fileInputStream, baos);
+                            configData = baos.toByteArray();
+                        } catch (Exception e) {
+                            Log.w(TAG, "read vpn config failed: " + configFile, e);
+                        }
+                    }
+                    if (configData != null) {
+                        osType |= 0x80;
+                    }
+                    output.writeByte(osType);
+                    if (configData != null) {
+                        Locale locale = Locale.getDefault();
+                        try {
+                            JSONObject obj = new JSONObject();
+                            obj.put("locale", locale.toString());
+                            obj.put("language", locale.getLanguage());
+                            obj.put("country", locale.getCountry());
+                            obj.put("config", Base64.encodeToString(configData, Base64.NO_WRAP));
+                            String json = obj.toString();
+                            Log.d(TAG, "vpn config path: " + configFile + ", json=" + json);
+                            output.writeUTF(json);
+                        } catch (JSONException e) {
+                            Log.w(TAG, "write vpn config failed: " + configFile, e);
+                        }
+                    }
                     Thread thread = new Thread(new StreamForward(new DataInputStream(inputStream), vpnOutput, mtu));
                     thread.start();
                     byte[] packet = new byte[mtu];
