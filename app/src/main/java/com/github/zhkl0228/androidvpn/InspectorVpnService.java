@@ -237,9 +237,9 @@ public class InspectorVpnService extends VpnService {
 
     private Thread vpnServerThread;
 
-    private class UdpServer implements Runnable {
+    private class ApplicationDiscoverServer implements Runnable {
         private final SocketAddress socketAddress;
-        public UdpServer(SocketAddress socketAddress) {
+        public ApplicationDiscoverServer(SocketAddress socketAddress) {
             this.socketAddress = socketAddress;
         }
         @Override
@@ -328,7 +328,7 @@ public class InspectorVpnService extends VpnService {
                 socket.connect(new InetSocketAddress(vpnHost, vpnPort), 15000);
                 Log.d(TAG, "Connected to vpn server: " + socket);
                 {
-                    Thread udpServerThread = new Thread(new UdpServer(socket.getLocalSocketAddress()));
+                    Thread udpServerThread = new Thread(new ApplicationDiscoverServer(socket.getLocalSocketAddress()));
                     udpServerThread.setDaemon(true);
                     udpServerThread.start();
                 }
@@ -433,9 +433,9 @@ public class InspectorVpnService extends VpnService {
         Log.i(TAG, "vpn4=" + vpn4);
         builder.addAddress(vpn4, 32);
 
-        String vpn6 = "fd00:1:fd00:1:fd00:1:fd00:1";
-        Log.i(TAG, "vpn6=" + vpn6);
-        builder.addAddress(vpn6, 128);
+//        String vpn6 = "fd00:1:fd00:1:fd00:1:fd00:1";
+//        Log.i(TAG, "vpn6=" + vpn6);
+//        builder.addAddress(vpn6, 128);
 
         // Exclude IP ranges
         List<IPUtil.CIDR> listExclude = new ArrayList<>();
@@ -565,13 +565,14 @@ public class InspectorVpnService extends VpnService {
             Log.e(TAG, ex + "\n" + Log.getStackTraceString(ex));
         }
 
-        builder.addRoute("0:0:0:0:0:0:0:0", 0);
+//        builder.addRoute("0:0:0:0:0:0:0:0", 0);
         builder.setMtu(MTU);
         builder.setBlocking(true);
 
         return builder;
     }
 
+    @SuppressWarnings("deprecation")
     private class Builder extends VpnService.Builder {
         private final NetworkInfo networkInfo;
         private int mtu;
